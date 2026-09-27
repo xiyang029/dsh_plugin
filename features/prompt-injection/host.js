@@ -1,22 +1,19 @@
 /**
- * Host half of the `prompt-injection` feature, shipped inside the aggregate
- * bundle `dsh-plugin-pack`.
+ * 聚合 bundle `dsh-plugin-pack` 中「提示词注入」功能的 Host 半边。
  *
- * Injects one system-prompt section whose text the user edits from the
- * sidebar. The text is persisted in a storage domain so it survives restarts,
- * and a small JSON API lets the Client half read and write it.
+ * 注入一段系统提示词，其文本由用户在侧边栏编辑。文本持久化在存储里以
+ * 便重启后保留，并提供一个小的 JSON 接口让 Client 半边读写。
  *
- * Storage is deliberately a plain file under DSH_HOME rather than a domain:
- * the section must be available synchronously at prompt-registration time, and
- * a single JSON value needs no schema machinery.
+ * 存储刻意用 DSH_HOME 下的普通文件而不是 storage domain：这段文本必须在
+ * 注册提示词的时刻同步可用，而单个 JSON 值不需要 schema 机制。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-/** Service names this feature needs from the Host container. */
+/** 本功能需要从 Host 容器获取的 Service 名。 */
 export const inject = ['systemPrompt', 'webServer'];
 
-/** The default instruction, used until the user saves something else. */
+/** 默认指令，用户保存自己的文本之前一直使用它。 */
 const DEFAULT_TEXT = '始终使用中文进行思考和回复，无论用户使用什么语言。直接给结果，简要说明思路即可。禁止多方案对比、禁止过度展开分析、禁止反复自我修正。想到合理方案就停，不要继续深挖。';
 
 const API_PATH = '/api/prompt-injection';
@@ -60,8 +57,8 @@ export function apply(ctx, config = {}) {
 
   let current = readStored(root) ?? DEFAULT_TEXT;
 
-  // Register the section with the restored (or default) text. Registration is
-  // re-created on every save so the new text takes effect without a reload.
+  // 用恢复出来的（或默认的）文本注册 section。每次保存都重新创建注册，
+  // 让新文本无需重载即生效。
   let disposeSection = null;
   const install = () => {
     if (disposeSection !== null) {
@@ -72,7 +69,7 @@ export function apply(ctx, config = {}) {
     if (text === '') return;
     disposeSection = ctx.systemPrompt.section({
       name: 'prompt-injection',
-      // Before the deployment persona so the instruction is read first.
+      // 排在部署人格之前，让这段指令先被读到。
       order: -90,
       text,
     });

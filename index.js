@@ -1,39 +1,36 @@
 /**
- * Host entry of the aggregate bundle `dsh-plugin-pack`.
+ * 聚合 bundle `dsh-plugin-pack` 的 Host 入口。
  *
- * One installed bundle carries several independent features. Each feature is a
- * self-contained Cordis plugin under `features/<name>/host.js` with its own
- * `apply` and its own service `inject` list; this file is only the fan-out
- * point that mounts them, one by one, onto the same Host context.
+ * 一个安装包携带多个独立功能。每个功能都是 `features/<name>/host.js` 下的
+ * 自包含 Cordis 插件，有自己的 `apply` 和自己的 Service `inject` 列表；本文件
+ * 只是分发点，把它们逐个挂载到同一个 Host 上下文上。
  *
- * Because a Cordis plugin declares its Host Service dependencies with `inject`,
- * one bundle mounting several features has to declare the union of what its
- * features need -- the unused Service of a disabled feature is simply never
- * resolved and never becomes a hard dependency of anything.
+ * 由于 Cordis 插件用 `inject` 声明 Host Service 依赖，一个 bundle 挂载多个
+ * 功能时必须声明所有功能依赖的并集 —— 被禁用功能用不到的 Service 只是
+ * 永远不会被解析，不会成为任何东西的硬依赖。
  *
- * Adding a feature is one entry in `FEATURES`: no extra row in
- * `cordis.patch.yml`, and no second bundle to install.
+ * 新增一个功能只需在 `FEATURES` 数组里加一项：不用在 `cordis.patch.yml`
+ * 里加新行，也不需要安装第二个 bundle。
  */
 import { apply as applyDeleteSession } from './features/delete-session/host.js';
 import { apply as applyPromptInjection } from './features/prompt-injection/host.js';
 
-/** Union of the Host Services the features below require. */
+/** 下面这些功能所需的 Host Service 的并集。 */
 export const inject = ['commands', 'systemPrompt', 'webServer'];
 
-/** The features this bundle ships, in mount order. */
+/** 本 bundle 提供的功能列表，按挂载顺序排列。 */
 export const FEATURES = [
   { name: 'delete-session', title: '删除会话', enabled: true, apply: applyDeleteSession },
   { name: 'prompt-injection', title: '提示词注入', enabled: true, apply: applyPromptInjection },
 ];
 
 /**
- * Mount every enabled feature on this Host context.
+ * 把每个已启用的功能挂载到这个 Host 上下文上。
  *
- * Each feature's own `ctx.effect` calls inside its `apply` are what own its
- * registrations, so calling `apply` directly is enough for them to be torn down
- * with the bundle. Exceptions are deliberately not caught: a feature that
- * throws must surface as a failed bundle row in the Loader rather than be
- * silently swallowed.
+ * 各功能在自己 `apply` 内部调用的 `ctx.effect` 才是它注册的所有者，所以
+ * 直接调用 `apply` 就足以让它的注册随 bundle 一起被正确销毁。这里故意
+ * 不捕获异常：抛错的功能必须以 Loader 中一行失败的 bundle 记录暴露出来，
+ * 而不是被静默吞掉。
  */
 export function apply(ctx, config = {}) {
   for (const feature of FEATURES) {

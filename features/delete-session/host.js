@@ -1,28 +1,25 @@
 /**
- * Host half of the `delete-session` feature, shipped inside the aggregate
- * bundle `dsh-plugin-pack`.
+ * 聚合 bundle `dsh-plugin-pack` 中「删除会话」功能的 Host 半边。
  *
- * Registers a `/delete-session` command that permanently removes one session's
- * artifact directory. The runtime exposes no session-delete API (session
- * persistence is append-only and only supports archive), so this removes the
- * directory by hand. The Client half confirms with the user before it executes.
+ * 注册 `/delete-session` 命令，永久删除一个会话的工件目录。运行时没有暴露
+ * 会话删除 API（会话持久化是 append-only 的，只支持归档），所以这里手动
+ * 删除目录。Client 半边会在执行前向用户二次确认。
  */
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Service names this feature needs from the Host container. */
+/** 本功能需要从 Host 容器获取的 Service 名。 */
 export const inject = ['commands'];
 
 /**
- * Drop one session id from every workspace registration.
+ * 从每一个工作区注册里删掉一个会话 id。
  *
- * The sidebar renders sessions from the workspace registry's `sessionIds`, not
- * from a directory scan, so deleting the artifact directory alone leaves a
- * ghost row: the id is still listed even though nothing backs it. This is the
- * missing half of a permanent delete.
+ * 侧边栏渲染会话列表靠的是工作区注册表的 `sessionIds`，而不是目录扫描，
+ * 所以只删工件目录会留下幽灵行：id 还列在那里，背后却什么都没有。这是
+ * 「永久删除」缺失的另一半。
  *
- * Best effort by design: a missing or unreadable registry is not a reason to
- * refuse the delete, so every failure path just stops editing.
+ * 设计上尽力而为：注册表缺失或读不了不是拒绝删除的理由，所以每条失败
+ * 路径都只是停止编辑。
  */
 function unregisterFromWorkspaces(home, sessionId) {
   const path = join(home, 'storages', 'workspace.json');
@@ -60,16 +57,15 @@ function unregisterFromWorkspaces(home, sessionId) {
 }
 
 /**
- * Drop one session's projection-cache row, if any.
+ * 删除一个会话的投影缓存行（如果存在）。
  *
- * `storages/session_projcache/sessions/<id>.json` is derived state the Host
- * rebuilds from the session log, but it is never swept when the log
- * disappears: a stale row keeps the deleted session's metadata alive on disk
- * (title, timestamps) and can resurface it in cached-list paths. Deleting the
- * log is therefore only half of the cleanup.
+ * `storages/session_projcache/sessions/<id>.json` 是 Host 从会话日志重建的
+ * 派生状态，但日志消失时它从不被清扫：残留的行让被删会话的元数据（标题、
+ * 时间戳）继续活在磁盘上，并可能在缓存列表路径里重新冒出来。所以只删
+ * 日志只是清理的一半。
  *
- * Best effort by design: a missing or unreadable cache row is not a reason to
- * refuse the delete, so every failure path just stops editing.
+ * 设计上尽力而为：缓存行缺失或读不了不是拒绝删除的理由，所以每条失败
+ * 路径都只是停止编辑。
  */
 function forgetProjectionCache(home, sessionId) {
   const path = join(home, 'storages', 'session_projcache', 'sessions', `${sessionId}.json`);
@@ -81,11 +77,11 @@ function forgetProjectionCache(home, sessionId) {
 }
 
 /**
- * Locate one session's artifact directory without assuming its project key.
+ * 在不预设 project key 的前提下定位一个会话的工件目录。
  *
- * The JSONL layout is `<root>/<projectKey>/<encodedId>/…` where the project
- * key is a lossy encoding of the session's `cwd`. Only the id encodes back
- * deterministically, so the project level must be scanned.
+ * JSONL 的目录布局是 `<root>/<projectKey>/<encodedId>/…`，其中 project key
+ * 是会话 `cwd` 的有损编码。只有 id 能确定性地反推回来，所以必须扫描
+ * project 这一层。
  */
 function findSessionDir(root, sessionId) {
   if (!existsSync(root)) return undefined;
@@ -100,13 +96,11 @@ function findSessionDir(root, sessionId) {
 }
 
 /**
- * Remove one session's artifacts and its workspace registration. Irreversible.
+ * 删除一个会话的工件和它的工作区注册。不可逆。
  *
- * The artifacts go FIRST: a registry row without artifacts is a harmless
- * pending-write shape the Host reconciles, while a deleted registry row with
- * artifacts still on disk is the ghost that leaves storage orphaned from the
- * sidebar. If the directory delete fails (a locked log on Windows, say) the
- * registration stays untouched and the caller sees the error.
+ * 工件先删：没有工件的注册表行是宿主会自行调和的无害 pending-write 形态，
+ * 而注册表行已删、工件还在盘上才是让存储与侧边栏脱节的幽灵。如果目录
+ * 删除失败（比如 Windows 上日志文件被锁），注册表保持原样，调用方看到错误。
  */
 function deleteSession(root, home, sessionId) {
   if (typeof sessionId !== 'string' || !sessionId.startsWith('session-')) {
@@ -120,8 +114,8 @@ function deleteSession(root, home, sessionId) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
-  // Unregister even when the directory is already gone: the ghost row in the
-  // sidebar comes from the registry, not from the filesystem.
+  // 即使目录早已不在也要注销注册：侧边栏的幽灵行来自注册表，
+  // 而不是文件系统。
   unregisterFromWorkspaces(home, sessionId);
   forgetProjectionCache(home, sessionId);
   return { ok: true, removed: dir !== undefined };
@@ -141,8 +135,7 @@ export function apply(ctx, config = {}) {
       const sessionId = typeof rawInput === 'string' ? rawInput.trim() : '';
       const result = deleteSession(root, home, sessionId);
       if (!result.ok) return { kind: 'error', text: `Delete failed: ${result.error}` };
-      // Always announce: an unregistered-but-listed session is exactly the
-      // ghost row the sidebar must drop.
+      // 必须总是广播：已注销但仍列在列表里的会话正是侧边栏要丢掉的幽灵行。
       ctx.emit('api-session/removed', sessionId);
       return {
         kind: 'success',

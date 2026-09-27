@@ -1,28 +1,25 @@
 /**
- * Package-local Client chunk of the `delete-session` feature in the aggregate
- * bundle `dsh-plugin-pack`.
+ * 聚合 bundle `dsh-plugin-pack` 中「删除会话」功能的包内 Client chunk。
  *
- * WHY A CHUNK: the module loader keys a bundle's root registration by its boot
- * row id, which IS the package name, so the root `client.js` may only register
- * `id: 'dsh-plugin-pack'`. Every additional module in the same package must
- * therefore be a chunk: same `id` (the loader derives the internal key as
- * `<id>/<chunk>`), disambiguated by the `chunk` field. `client-modules`
- * validates the name against `/^client\.[A-Za-z0-9][A-Za-z0-9._-]*\.js$/`.
+ * 为什么用 chunk：模块加载器按 boot row id 校验 bundle 的根注册，而 row id
+ * 就是包名，所以根 `client.js` 只能注册 `id: 'dsh-plugin-pack'`。同一个包内
+ * 的额外模块因此必须声明为 chunk：id 相同（加载器以 `<id>/<chunk>` 作为
+ * 内部键），用 `chunk` 字段区分。`client-modules` 用
+ * `/^client\.[A-Za-z0-9][A-Za-z0-9._-]*\.js$/` 校验 chunk 文件名。
  *
- * HOW IT IS LOADED: never by the host. The root `client.js` factory pulls this
- * file with `require.async('./client.delete-session.js')`; that path is the
- * only entry into `importChunk`. Nothing here runs until the root asks for it.
+ * 如何被加载：宿主从不主动加载。根 `client.js` 的工厂用
+ * `require.async('./client.delete-session.js')` 拉取本文件；这是进入
+ * `importChunk` 的唯一入口。根模块不来取，这里什么都不会执行。
  *
- * WHAT IT EXPORTS: this is a plain module consumed by the root factory, not a
- * plugin row of its own. `materialize` (client-modules/lib/client.js:683) takes
- * the factory's RETURN value as the module exports, so the object returned here
- * below is what `require.async` resolves to. The root then calls `apply(ctx)`
- * with its own ctx, which is why locale and slot registration land on the root
- * context under this feature's namespace.
+ * 暴露什么：这是一个被根工厂消费的普通模块，不是自己的插件行。
+ * `materialize`（client-modules/lib/client.js:683）把工厂的返回值作为模块
+ * exports，所以下面 return 的对象就是 `require.async` 解析到的值。根模块
+ * 随后用自己的 ctx 调用 `apply(ctx)`，因此 locale 与 slot 注册都落在根
+ * 上下文上，并使用本功能的命名空间。
  *
- * Locale namespace stays `edit-message` (the shipped value, kept for continuity
- * with the pre-merge plugin). It is distinct from the `prompt-injection`
- * namespace of the sibling chunk, so the two never collide in one page.
+ * locale 命名空间保持 `edit-message`（合并前的既有值，为保持连续性而
+ * 保留）。它与相邻 chunk 的 `prompt-injection` 命名空间互不相同，两者在
+ * 同一页面不会冲突。
  */
 window.__ModuleLoader__.load({
   id: 'dsh-plugin-pack',
@@ -31,9 +28,8 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const { createElement: h, useState, useLayoutEffect, useRef } = React;
 
-    // The host's own UI atoms: every control below is a shipped component, so
-    // the plugin inherits the real product styling (tokens, hover, radius,
-    // focus) instead of restating it in a private stylesheet.
+    // 宿主自己的 UI 原子组件：下面每个控件都是官方发布的组件，插件因此
+    // 直接继承真实的产品样式（token、hover、圆角、焦点），无需自建样式表。
     const UI = require('@deepseek-ai/dsh-client-ui-primitives');
     const {
       Button,
@@ -70,20 +66,17 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Find the host's row-icon button class from a sibling of `button`.
+     * 从 `button` 的兄弟节点里找出宿主的行图标按钮样式类。
      *
-     * The archive and pin buttons in this same strip are plain `<button>`s
-     * styled by a CSS-module class whose name is build-hashed (`ozLDBG_iconButton`
-     * today, something else after any rebuild). The slot contract passes no
-     * styling handle down, so the only stable way to match them is to read the
-     * class off a rendered sibling — hardcoding the hash would break on the
-     * next release.
+     * 同一条操作条里的归档、置顶按钮都是普通 `<button>`，样式来自一个
+     * CSS-module 类，类名带构建哈希（今天是 `ozLDBG_iconButton`，重新构建
+     * 后就会变）。slot 契约不传递样式句柄，所以唯一稳定的匹配方式是渲染后
+     * 从兄弟节点上读取类名 —— 写死哈希下一次发版就会失效。
      *
-     * Walks up a few levels because the slot may wrap our entry in an extra
-     * element; stops at the first ancestor holding more than one button, so it
-     * can never latch onto an unrelated control elsewhere in the sidebar.
+     * 向上多走几层是因为 slot 可能把我们的入口再包一层元素；遇到第一个
+     * 拥有多个按钮的祖先就停，绝不会误抓侧边栏里无关的控件。
      *
-     * @returns the class name, or undefined when no sibling carries one.
+     * @returns 找到的类名；没有兄弟节点带类名时为 undefined。
      */
     function findIconButtonClass(button) {
       if (button === null || button === undefined) return undefined;
@@ -91,9 +84,9 @@ window.__ModuleLoader__.load({
       for (let depth = 0; node !== null && node !== undefined && depth < 2; depth += 1, node = node.parentElement) {
         const buttons = node.querySelectorAll('button');
         const others = [...buttons].filter((candidate) => candidate !== button);
-        // No other button here means this is a wrapper, not the strip: keep
-        // climbing. Once other buttons appear this IS the strip, so a miss
-        // ends the search instead of climbing into unrelated markup.
+        // 这里没有别的按钮说明它只是包装层而非操作条本体：继续向上。
+        // 一旦出现其他按钮，这层就是操作条 —— 找不到就到此为止，
+        // 不再向上爬进无关的标记结构。
         if (others.length === 0) continue;
         for (const sibling of others) {
           for (const name of sibling.classList) {
@@ -105,7 +98,7 @@ window.__ModuleLoader__.load({
       return undefined;
     }
 
-    /** The host's row-icon button class, read from a rendered sibling. */
+    /** 宿主的行图标按钮样式类，渲染后从兄弟节点读取。 */
     function useSiblingIconButtonClass(ref) {
       const [className, setClassName] = useState(undefined);
       useLayoutEffect(() => {
@@ -117,18 +110,16 @@ window.__ModuleLoader__.load({
 
     return {
       /**
-       * Register this feature on the CALLER's context (the root client.js
-       * ctx). `inject` is deliberately NOT declared here: this chunk is a plain
-       * module, not a plugin row, so the root module owns service injection and
-       * this function only uses the services it is handed.
+       * 在调用方的上下文（根 client.js 的 ctx）上注册本功能。这里故意不声明
+       * `inject`：本 chunk 是普通模块而非插件行，Service 注入由根模块持有，
+       * 本函数只使用被交到手里的服务。
        */
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, DICT), 'edit-message: dictionary');
 
         /**
-         * Permanently delete one session: run the Host command, then keep
-         * dropping the list row until it is really gone (a late baseline can
-         * put it back, so one refresh is not enough).
+         * 永久删除一个会话：执行 Host 命令，然后反复把列表行移除直到真的
+         * 消失（迟到的基线快照可能把它加回来，所以刷新一次并不够）。
          */
         const deleteSession = async (sessionId) => {
           if (sessionId === undefined) throw new Error('no session');
@@ -151,11 +142,11 @@ window.__ModuleLoader__.load({
         };
 
         /**
-         * Dialog target shared by the row button and the dropdown menu row.
+         * 行按钮与下拉菜单行共用的对话框目标。
          *
-         * The menu unmounts its rows the moment it closes, so a dialog owned by
-         * a menu item would die with it and never appear. Keeping the pending
-         * id here lets an always-mounted overlay own the dialog instead.
+         * 菜单关闭的瞬间会卸载自己的菜单行，所以由菜单项持有对话框的话，
+         * 对话框会跟着菜单一起死掉、永远显示不出来。把待删除的会话 id
+         * 保存在这里，让一个常驻挂载的浮层来拥有对话框。
          */
         const confirm = {
           sessionId: undefined,
@@ -176,7 +167,7 @@ window.__ModuleLoader__.load({
           },
         };
 
-        /** The delete confirmation, built from the shipped Modal. */
+        /** 删除确认对话框，由官方 Modal 构建。 */
         function DeleteDialog(props) {
           const t = props.t;
           const sessionId = props.sessionId;
@@ -196,8 +187,8 @@ window.__ModuleLoader__.load({
             }
           };
 
-          // `open` stays true for the caller's chosen id; the Modal handles the
-          // mask, Escape, focus trapping, and body portal on its own.
+          // `open` 对调用方选定的 id 保持 true；遮罩、Escape、焦点圈定和
+          // body 传送门都由 Modal 自己处理。
           return h(Modal, {
             open: sessionId !== undefined,
             onClose: () => confirm.set(undefined),
@@ -222,14 +213,14 @@ window.__ModuleLoader__.load({
           }, error === null ? null : h(Tag, { tone: 'danger' }, error));
         }
 
-        /** Always-mounted owner of the delete confirmation dialog. */
+        /** 删除确认对话框的常驻挂载拥有者。 */
         function DeleteConfirmHost(props) {
           const t = props.t;
           const sessionId = React.useSyncExternalStore(confirm.subscribe.bind(confirm), confirm.getSnapshot.bind(confirm));
           return h(DeleteDialog, { t, sessionId });
         }
 
-        /** Row in the session "..." dropdown menu: permanently delete. */
+        /** 会话「...」下拉菜单中的行：永久删除。 */
         function DeleteSessionMenuItem(props) {
           const t = props.t;
           const sessionId = props.sessionId;
@@ -252,15 +243,13 @@ window.__ModuleLoader__.load({
         }
 
         /**
-         * Hover action in one sidebar Session row: permanently delete it.
+         * 侧边栏会话行上的悬浮操作：永久删除该会话。
          *
-         * Deliberately a plain `<button>` wearing the host's own row-icon class
-         * rather than a primitives `Button`: the shipped archive/pin actions in
-         * this strip are 16×16 icon buttons with no padding, and `Button`
-         * carries its own control geometry (28px tall, 14px inline padding)
-         * that would make this one visibly larger than its neighbours. The
-         * tooltip matches theirs too — bottom-aligned, right-aligned, 500ms
-         * delay — so hovering across the strip behaves identically.
+         * 故意用穿着宿主行图标类名的普通 `<button>`，而不是 primitives 的
+         * `Button`：同一条操作条里官方的归档/置顶按钮都是无内边距的 16×16
+         * 图标按钮，而 `Button` 自带控件几何（28px 高、14px 左右内边距），
+         * 会让这个按钮明显比邻居大。tooltip 也与它们一致 —— 底对齐、
+         * 右对齐、500ms 延迟 —— 悬停划过整条操作条的手感完全相同。
          */
         function DeleteSessionRowAction(props) {
           const t = props.t;
@@ -274,9 +263,8 @@ window.__ModuleLoader__.load({
               ref,
               type: 'button',
               className: hostClass,
-              // Until the sibling class is read (first paint, or a host that
-              // renamed it), reproduce the shipped geometry inline so the strip
-              // never jumps between two sizes.
+              // 在兄弟节点类名被读取到之前（首次绘制，或宿主改名后），
+              // 内联复刻官方几何，操作条不会在两种尺寸之间跳动。
               style: hostClass === undefined ? {
                 boxSizing: 'border-box',
                 width: '16px',
@@ -305,7 +293,7 @@ window.__ModuleLoader__.load({
           locale: NS,
         }, DeleteSessionRowAction));
 
-        // Same action as a row of the session "..." dropdown menu.
+        // 同一个动作，作为会话「...」下拉菜单的一行。
         ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
           name: 'sidebar.workspaces.session.menu.item',
           id: 'edit-message-delete-session',
@@ -313,7 +301,7 @@ window.__ModuleLoader__.load({
           locale: NS,
         }, DeleteSessionMenuItem));
 
-        // The confirm dialog lives here so it survives the menu closing.
+        // 确认对话框挂在这里，这样菜单关闭后它仍存活。
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay',
           id: 'edit-message-delete-dialog',

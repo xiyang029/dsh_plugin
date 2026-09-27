@@ -1,27 +1,24 @@
 /**
- * Package-local Client chunk of the `prompt-injection` feature in the
- * aggregate bundle `dsh-plugin-pack`.
+ * 聚合 bundle `dsh-plugin-pack` 中「提示词注入」功能的包内 Client chunk。
  *
- * WHY A CHUNK: the module loader keys a bundle's root registration by its boot
- * row id, which IS the package name, so the root `client.js` may only register
- * `id: 'dsh-plugin-pack'`. Every additional module in the same package must
- * therefore be a chunk: same `id` (the loader derives the internal key as
- * `<id>/<chunk>`), disambiguated by the `chunk` field. `client-modules`
- * validates the name against `/^client\.[A-Za-z0-9][A-Za-z0-9._-]*\.js$/`.
+ * 为什么用 chunk：模块加载器按 boot row id 校验 bundle 的根注册，而 row id
+ * 就是包名，所以根 `client.js` 只能注册 `id: 'dsh-plugin-pack'`。同一个包内
+ * 的额外模块因此必须声明为 chunk：id 相同（加载器以 `<id>/<chunk>` 作为
+ * 内部键），用 `chunk` 字段区分。`client-modules` 用
+ * `/^client\.[A-Za-z0-9][A-Za-z0-9._-]*\.js$/` 校验 chunk 文件名。
  *
- * HOW IT IS LOADED: never by the host. The root `client.js` factory pulls this
- * file with `require.async('./client.prompt-injection.js')`; that path is the
- * only entry into `importChunk`. Nothing here runs until the root asks for it.
+ * 如何被加载：宿主从不主动加载。根 `client.js` 的工厂用
+ * `require.async('./client.prompt-injection.js')` 拉取本文件；这是进入
+ * `importChunk` 的唯一入口。根模块不来取，这里什么都不会执行。
  *
- * WHAT IT EXPORTS: this is a plain module consumed by the root factory, not a
- * plugin row of its own. `materialize` (client-modules/lib/client.js:683) takes
- * the factory's RETURN value as the module exports, so the object returned here
- * below is what `require.async` resolves to. The root then calls `apply(ctx)`
- * with its own ctx, which is why locale and slot registration land on the root
- * context under this feature's namespace.
+ * 暴露什么：这是一个被根工厂消费的普通模块，不是自己的插件行。
+ * `materialize`（client-modules/lib/client.js:683）把工厂的返回值作为模块
+ * exports，所以下面 return 的对象就是 `require.async` 解析到的值。根模块
+ * 随后用自己的 ctx 调用 `apply(ctx)`，因此 locale 与 slot 注册都落在根
+ * 上下文上，并使用本功能的命名空间。
  *
- * Locale namespace stays `prompt-injection`, distinct from the `edit-message`
- * namespace of the sibling chunk, so the two never collide in one page.
+ * locale 命名空间为 `prompt-injection`，与相邻 chunk 的 `edit-message`
+ * 命名空间互不相同，两者在同一页面不会冲突。
  */
 window.__ModuleLoader__.load({
   id: 'dsh-plugin-pack',
@@ -29,16 +26,15 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const { createElement: h, useState, useEffect } = React;
-    // The module system resolves the primitives package as a baseline external,
-    // so the dialog, buttons, and glyph come from the host's own controls
-    // instead of hand-copied markup and a private stylesheet.
+    // 模块系统把 primitives 包作为基线 external 解析，所以对话框、按钮和
+    // 图标都来自宿主自己的控件，而不是手工复刻标记加私有样式表。
     const UI = require('@deepseek-ai/dsh-client-ui-primitives');
     const { Modal, Button, IconEditOutlineRegular } = UI;
 
     const NS = 'prompt-injection';
     const API = 'api/prompt-injection';
-    // This plugin's own copy is Chinese in every locale: it exists to steer the
-    // assistant into Chinese, so its UI must not leak English anywhere.
+    // 本插件的这份字典在所有语言下都是中文：它存在的意义就是把助手引导到
+    // 中文，所以它的 UI 不允许泄漏任何英文。
     const DICT = {
       en: {
         open: '提示词注入',
@@ -66,9 +62,8 @@ window.__ModuleLoader__.load({
       },
     };
 
-    // The one control primitives does not ship is a multi-line field, so it
-    // borrows the settings field's tokens (border, radius, layer, type) inline
-    // rather than through a class of its own.
+    // primitives 没有发布多行输入控件，所以这里内联借用设置页字段的
+    // token（边框、圆角、层级、字号），而不是通过某个类名。
     const AREA_STYLE = {
       width: '100%',
       boxSizing: 'border-box',
@@ -113,15 +108,14 @@ window.__ModuleLoader__.load({
 
     return {
       /**
-       * Register this feature on the CALLER's context (the root client.js
-       * ctx). `inject` is deliberately NOT declared here: this chunk is a plain
-       * module, not a plugin row, so the root module owns service injection and
-       * this function only uses the services it is handed.
+       * 在调用方的上下文（根 client.js 的 ctx）上注册本功能。这里故意不声明
+       * `inject`：本 chunk 是普通模块而非插件行，Service 注入由根模块持有，
+       * 本函数只使用被交到手里的服务。
        */
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, DICT), 'prompt-injection: dictionary');
 
-        /** Editor dialog: the host Modal owns the mask, Escape, and focus. */
+        /** 编辑对话框：遮罩、Escape 与焦点都由宿主 Modal 负责。 */
         function PromptDialog(props) {
           const t = props.t;
           const [text, setText] = useState('');
@@ -170,8 +164,8 @@ window.__ModuleLoader__.load({
               error === null ? null : h('p', { key: 'error', style: ERROR_STYLE }, error),
               h('textarea', {
                 key: 'area',
-                // The modal layer focuses the marked control and restores the
-                // invoking one on close; React autoFocus would run too early.
+                // modal 层会聚焦带此标记的控件，关闭时把焦点还给触发者；
+                // React 的 autoFocus 跑得太早，用不了。
                 'data-modal-autofocus': true,
                 style: AREA_STYLE,
                 value: text,
@@ -186,7 +180,7 @@ window.__ModuleLoader__.load({
                 key: 'reset',
                 variant: 'ghost',
                 size: 'sm',
-                // Pushes itself to the start of the right-aligned action row.
+                // 把自己推到右对齐操作行的最前面。
                 style: { marginRight: 'auto' },
                 disabled: loading || busy,
                 onClick: () => setText(fallback),
@@ -199,8 +193,7 @@ window.__ModuleLoader__.load({
               }, t('cancel')),
               h(Button, {
                 key: 'save',
-                // Primary, not danger: this action saves text, so it must not
-                // read as destructive.
+                // primary 而非 danger：这个动作只是保存文本，不能被读成破坏性操作。
                 variant: 'primary',
                 disabled: loading || busy,
                 onClick: () => void save(),
@@ -209,7 +202,7 @@ window.__ModuleLoader__.load({
           });
         }
 
-        /** Main-panel body shown when the sidebar row switches to this panel. */
+        /** 侧边栏行切换到本面板时显示的主面板内容。 */
         function PromptInjectionPanel(props) {
           const t = props.t;
           const [editing, setEditing] = useState(false);
@@ -238,7 +231,7 @@ window.__ModuleLoader__.load({
           );
         }
 
-        /** Sidebar panel-list glyph; the host row owns layout and the click. */
+        /** 侧边栏面板列表的图标；布局与点击都由宿主的行负责。 */
         function PromptInjectionButton(props) {
           return h(IconEditOutlineRegular, {
             size: typeof props.size === 'number' ? props.size : 16,
@@ -249,16 +242,16 @@ window.__ModuleLoader__.load({
           name: 'sidebar.panellist',
           id: 'prompt-injection',
           order: 900,
-          // Without a label the host falls back to the id, which is why the row
-          // showed "prompt-injection" instead of Chinese text.
+          // 不给 label 的话宿主会回退显示 id，这就是行名曾经显示成
+          // "prompt-injection" 而不是中文的原因。
           label: () => ctx.locale.bind(NS)('open'),
-          // Compiled packages get no automatic shadowing priority.
+          // 编译安装的包没有自动的遮蔽优先级。
           priority: -1,
           locale: NS,
         }, PromptInjectionButton));
 
-        // The host's row button switches to the main panel of the same id and
-        // throws when none is registered; provide one so the row is valid.
+        // 宿主的行按钮会切换到同 id 的主面板，没有注册面板时它会抛错；
+        // 提供一个，让这个行是有效的。
         ctx.slots.inject('main', () => ctx.slots.register({
           name: 'main',
           key: 'prompt-injection',
