@@ -62,8 +62,8 @@ dsh_plugin/
 ├── client.prompt-injection.js   # 包内 chunk：提示词注入 UI
 ├── locales/{en,zh}.json
 ├── features/
-│   ├── delete-session/{host.js,client.js}
-│   └── prompt-injection/{host.js,client.js}
+│   ├── delete-session/host.js
+│   └── prompt-injection/host.js
 └── README.md
 ```
 
@@ -73,9 +73,8 @@ dsh_plugin/
 | --- | --- |
 | `index.js` | Host 聚合入口：`FEATURES` 数组 + `apply`，把各 feature 的 Host 半边挂到同一个 ctx |
 | `client.js` | Client **根模块**：注册 `id: 'dsh-plugin-pack'`，并在 `apply` 里按需拉取两个 chunk |
-| `client.<name>.js` | 包内 **chunk**：该 feature 的 Client UI，导出 `apply(ctx)` |
-| `features/<name>/host.js` | 单个功能的 Host 实现（自带 `apply` 与 `inject`） |
-| `features/<name>/client.js` | 上述 chunk 的**可读镜像**（运行时不会被加载） |
+| `client.<name>.js` | 包内 **chunk**：该 feature 的 Client UI（唯一实现，运行时真正加载的就是它） |
+| `features/<name>/host.js` | 单个功能的 Host 实现（自带 `apply` 与 `inject`，被 `index.js` import） |
 | `locales/{en,zh}.json` | 包级元数据文案（标题／描述），与 feature 的 locale 命名空间相互独立 |
 | `cordis.patch.yml` | bundle patch，只向 profile 插入一行 `dsh-plugin-pack` |
 
@@ -144,9 +143,8 @@ chunk 是**被根模块消费的普通模块，不是独立的插件行**，因�
 | `client.delete-session.js` | `edit-message` | `sidebar.workspaces.session.row.action`、`sidebar.workspaces.session.menu.item`、`shell.overlay` |
 | `client.prompt-injection.js` | `prompt-injection` | `sidebar.panellist`、`main` |
 
-> 维护约定：修改某个 feature 的 Client UI 需要同时改**两处**——根目录的
-> `client.<name>.js`（真正运行）与 `features/<name>/client.js`（可读镜像）。
-> 二者必须保持一致；若出现分歧，**以根目录的 chunk 为准**。
+> 维护约定：每个 feature 的 Client UI 只有一份实现，就是根目录的 `client.<name>.js`
+> chunk。改 UI 只改这一处，不存在需要同步的镜像文件。
 
 ### bundle 接线
 
@@ -215,10 +213,9 @@ factory(require) {
 
 ### 与 feature 源码的关系
 
-也可以直接编辑 `F:\dsh_plugin\features\<name>\` 下的实现文件（例如整段移除某个 feature
-的注册逻辑）。但请注意：**真正运行的 Client 代码是根目录的 `client.<name>.js` chunk**，
-`features\<name>\client.js` 只是可读镜像；只改后者不会影响运行结果。
-同理，`features\<name>\host.js` 是 Host 侧真正被 `index.js` import 的实现，改它有效。
+`features/<name>/host.js` 是 Host 侧真正被 `index.js` import 的实现，改它有效；
+Client UI 则直接改根目录的 `client.<name>.js` chunk（唯一实现）。
+`features/` 下只有 Host 代码，没有 Client 代码。
 
 ## 7. 数据位置
 
@@ -250,7 +247,7 @@ dsh plugin --profile desktop add F:\dsh_plugin
 ```
 
 修改 `index.js` / `client.js` 后，重启对应运行时（或触发热加载）即可看到效果；
-修改 Client 半边时注意上一节的"两处同步"约定。
+修改 Client UI 时直接编辑对应的 `client.<name>.js` chunk 即可。
 
 ## 9. 许可证
 

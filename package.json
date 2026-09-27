@@ -18,7 +18,7 @@
     "index.js",
     "client.js",
     "client.*.js",
-    "features/*/*.js",
+    "features/*/host.js",
     "cordis.patch.yml",
     "locales/*.json"
   ],
