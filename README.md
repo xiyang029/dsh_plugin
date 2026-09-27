@@ -148,9 +148,12 @@ chunk 是**被根模块消费的普通模块，不是独立的插件行**，因�
 
 ### bundle 接线
 
-`cordis.patch.yml` 向 profile 的插件列表**插入两行**（每个功能一行，行名用包的
-子路径导出 `dsh-plugin-pack/delete-session` 与 `dsh-plugin-pack/prompt-injection`），
-所以在官方插件页里本包显示为**两个组件**，每个组件可以独立停用/启用。
+`cordis.patch.yml` 向 profile 的插件列表**插入三行**：一行根行
+`dsh-plugin-pack`（Client bundle 的唯一载体 —— 收录机制只认根包名行，
+子路径行不进 Client boot graph），加两行功能子路径行
+`dsh-plugin-pack/delete-session` 与 `dsh-plugin-pack/prompt-injection`
+（各自的 Host 功能）。官方插件页里本包显示为**三个组件**：根行
+（Host 侧为空操作，仅承载 UI）+ 两个功能组件，功能组件可独立停用/启用。
 新增 feature 时需要：在 `index.js` 的 `FEATURES` 里加一项、在 `client.js` 的
 `ENABLED` 里加一个键、在 `package.json` 的 `exports` 里加一个子路径导出、
 并新增一个 `client.<name>.js` chunk 和一行 patch insert。
