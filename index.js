@@ -1,41 +1,24 @@
 /**
- * 聚合 bundle `dsh-plugin-pack` 的 Host 入口。
+ * 聚合 bundle `dsh-plugin-pack` 的根行（Client bundle 载体行）。
  *
- * 一个安装包携带多个独立功能。每个功能都是 `features/<name>/host.js` 下的
- * 自包含 Cordis 插件，有自己的 `apply` 和自己的 Service `inject` 列表；本文件
- * 只是分发点，把它们逐个挂载到同一个 Host 上下文上。
+ * 为什么存在一个"什么都不做"的根行
+ * --------------------------------
+ * Client bundle 的收录只认**根包名行**：dsh-client-modules 的激活扫描
+ * （lib/index.js 的 `exactPackageSpecifier`）对带子路径的行名（如
+ * `dsh-plugin-pack/delete-session`）返回 undefined，`resolveMeta` 因此
+ * 返回 null，这样的行不会进入 boot graph —— 包的 `client.js` 就永远不会
+ * 被页面加载。官方 `dsh-plugin-desktop` 家族也是同样的结构：根行
+ * `dsh-plugin-desktop` 承载 Client bundle，`dsh-plugin-desktop/terminal`
+ * 等子路径行承载各自的 Host 功能。
  *
- * 由于 Cordis 插件用 `inject` 声明 Host Service 依赖，一个 bundle 挂载多个
- * 功能时必须声明所有功能依赖的并集 —— 被禁用功能用不到的 Service 只是
- * 永远不会被解析，不会成为任何东西的硬依赖。
+ * 因此本行的职责是：让 `dsh-plugin-pack` 作为一个激活的 Loader 行存在，
+ * 从而让 Client 根模块（client.js + 两个 chunk）被收录进页面；Host 功能
+ * 全部由 `plugin-pack-delete-session` 与 `plugin-pack-prompt-injection`
+ * 两个子路径组件行承担（见 cordis.patch.yml）。本行绝不挂载任何功能，
+ * 否则会与两个子路径行重复注册命令与路由。
  *
- * 新增一个功能只需在 `FEATURES` 数组里加一项：不用在 `cordis.patch.yml`
- * 里加新行，也不需要安装第二个 bundle。
+ * 唯一的真实功能开关在 Client 侧：client.js 里的 `ENABLED` 映射。
  */
-import { apply as applyDeleteSession } from './features/delete-session/host.js';
-import { apply as applyPromptInjection } from './features/prompt-injection/host.js';
 
-/** 下面这些功能所需的 Host Service 的并集。 */
-export const inject = ['commands', 'systemPrompt', 'webServer'];
-
-/** 本 bundle 提供的功能列表，按挂载顺序排列。 */
-export const FEATURES = [
-  { name: 'delete-session', title: '删除会话', enabled: true, apply: applyDeleteSession },
-  { name: 'prompt-injection', title: '提示词注入', enabled: true, apply: applyPromptInjection },
-];
-
-/**
- * 把每个已启用的功能挂载到这个 Host 上下文上。
- *
- * 各功能在自己 `apply` 内部调用的 `ctx.effect` 才是它注册的所有者，所以
- * 直接调用 `apply` 就足以让它的注册随 bundle 一起被正确销毁。这里故意
- * 不捕获异常：抛错的功能必须以 Loader 中一行失败的 bundle 记录暴露出来，
- * 而不是被静默吞掉。
- */
-export function apply(ctx, config = {}) {
-  for (const feature of FEATURES) {
-    if (feature.enabled === false) continue;
-    const featureConfig = config?.[feature.name] ?? {};
-    feature.apply(ctx, featureConfig);
-  }
-}
+/** 刻意留空：见文件头说明。功能在两个子路径组件行上。 */
+export function apply() {}
