@@ -1,4 +1,7 @@
 - insert:
-    - id: plugin-pack
-      name: dsh-plugin-pack
+    - id: plugin-pack-delete-session
+      name: dsh-plugin-pack/delete-session
+      config: {}
+    - id: plugin-pack-prompt-injection
+      name: dsh-plugin-pack/prompt-injection
       config: {}

@@ -148,23 +148,26 @@ chunk 是**被根模块消费的普通模块，不是独立的插件行**，因�
 
 ### bundle 接线
 
-`cordis.patch.yml` 只做一件事：向 profile 的插件列表**插入一行** `dsh-plugin-pack`。
-新增 feature 时**不需要**新增 patch 行、也不需要安装第二个 bundle——只需在
-`index.js` 的 `FEATURES` 里加一项、在 `client.js` 的 `ENABLED` 里加一个键，
-并新增一个 `client.<name>.js` chunk。
+`cordis.patch.yml` 向 profile 的插件列表**插入两行**（每个功能一行，行名用包的
+子路径导出 `dsh-plugin-pack/delete-session` 与 `dsh-plugin-pack/prompt-injection`），
+所以在官方插件页里本包显示为**两个组件**，每个组件可以独立停用/启用。
+新增 feature 时需要：在 `index.js` 的 `FEATURES` 里加一项、在 `client.js` 的
+`ENABLED` 里加一个键、在 `package.json` 的 `exports` 里加一个子路径导出、
+并新增一个 `client.<name>.js` chunk 和一行 patch insert。
 
 ## 6. 开关与"不能单独卸载"的取舍
 
 ### 整包开关
 
-本包注册为**一行 bundle**，所以在 profile 层面只能整包启用／禁用：
+本包仍是一个 bundle（一次安装、一条卸载命令），但包含**两个可独立开关的组件**：
 
 ```powershell
-dsh plugin --profile desktop remove dsh-plugin-pack   # 整包关闭
+dsh plugin --profile desktop remove dsh-plugin-pack   # 整包卸载
 ```
 
-这是方案 A 的直接代价：**无法只卸载其中一个功能**，也无法让两个功能各自拥有独立的
-版本号与升级节奏。换来的是"一次安装 = 全部功能"和单一生命周期。
+无法只卸载其中一个功能，也无法让两个功能各自拥有独立的版本号与升级节奏；
+换来的是"一次安装 = 全部功能"。单个功能的启停在插件页的两个组件行上完成，
+或在源码里按下节的开关改。
 
 ### 只启用其中一个功能
 

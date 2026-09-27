@@ -11,6 +11,8 @@
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
+    "./delete-session": "./features/delete-session/host.js",
+    "./prompt-injection": "./features/prompt-injection/host.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locales/*.json"
   },
