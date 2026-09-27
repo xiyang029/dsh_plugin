@@ -1,0 +1,39 @@
+{
+  "name": "dsh-plugin-pack",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "聚合插件包：一次安装即可获得删除会话与提示词注入两项功能",
+  "meta": {
+    "title": "聚合插件包",
+    "description": "聚合多个功能的单包插件：删除会话、提示词注入。"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locales/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "client.*.js",
+    "features/*/*.js",
+    "cordis.patch.yml",
+    "locales/*.json"
+  ],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  }
+}
