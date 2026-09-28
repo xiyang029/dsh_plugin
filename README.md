@@ -31,13 +31,19 @@ dsh plugin --profile desktop add `
   github:xiyang029/dsh_plugin#path:packages/prompt-injection
 ```
 
-从本地目录安装（开发调试，同样一条命令）：
+从本地目录安装（开发调试，同样一条命令）：先把仓库克隆到任意位置，然后把
+下面命令里的 `<repo>` 替换为克隆目录的**绝对路径**（`dsh plugin add` 不接受
+相对路径）：
 
 ```powershell
 dsh plugin --profile desktop add `
-  E:\python\dsh_plugin\packages\delete-session `
-  E:\python\dsh_plugin\packages\prompt-injection
+  <repo>\packages\delete-session `
+  <repo>\packages\prompt-injection
 ```
+
+例如克隆到 `D:\code\dsh_plugin` 时，两个 spec 就是
+`D:\code\dsh_plugin\packages\delete-session` 与
+`D:\code\dsh_plugin\packages\prompt-injection`。
 
 安装后重启（或让 profile 热加载）即可生效。每个包的 `package.json` 都声明了
 `dsh.bundle.patch` 指向自带的 `cordis.patch.yml`，不需要手动编辑 profile 的
