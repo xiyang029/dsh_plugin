@@ -1,12 +1,16 @@
 /**
- * 聚合 bundle `dsh-plugin-pack` 中「删除会话」功能的 Host 半边。
+ * `dsh-plugin-delete-session` 的 Host 半边。
  *
  * 注册 `/delete-session` 命令，永久删除一个会话的工件目录。运行时没有暴露
  * 会话删除 API（会话持久化是 append-only 的，只支持归档），所以这里手动
  * 删除目录。Client 半边会在执行前向用户二次确认。
  */
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { writeFileAtomicSync } from './atomic-write.js';
+
+/** Cordis 插件名（官方惯例导出，便于日志与诊断定位）。 */
+export const name = 'delete-session';
 
 /** 本功能需要从 Host 容器获取的 Service 名。 */
 export const inject = ['commands'];
@@ -50,7 +54,8 @@ function unregisterFromWorkspaces(home, sessionId) {
   }
   if (!changed) return;
   try {
-    writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+    // 原子替换：注册表保存着所有工作区的会话注册，写一半损坏的代价太大。
+    writeFileAtomicSync(path, `${JSON.stringify(data, null, 2)}\n`);
   } catch {
     /* ignore */
   }
@@ -130,19 +135,30 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => ctx.commands.register({
     name: 'delete-session',
     description: 'Permanently delete one session and its stored log',
+    // 发现界面里给这条命令一个输入格式提示。
+    input: { hint: '<sessionId>' },
     recordInput: false,
     handler: ({ rawInput }) => {
       const sessionId = typeof rawInput === 'string' ? rawInput.trim() : '';
-      const result = deleteSession(root, home, sessionId);
-      if (!result.ok) return { kind: 'error', text: `Delete failed: ${result.error}` };
-      // 必须总是广播：已注销但仍列在列表里的会话正是侧边栏要丢掉的幽灵行。
-      ctx.emit('api-session/removed', sessionId);
-      return {
-        kind: 'success',
-        text: result.removed
-          ? `Deleted session ${sessionId}.`
-          : `Session ${sessionId} had no stored log.`,
-      };
+      if (sessionId === '') {
+        return { kind: 'error', text: 'Delete failed: missing session id (usage: /delete-session <sessionId>)' };
+      }
+      try {
+        const result = deleteSession(root, home, sessionId);
+        if (!result.ok) return { kind: 'error', text: `Delete failed: ${result.error}` };
+        // 必须总是广播：已注销但仍列在列表里的会话正是侧边栏要丢掉的幽灵行。
+        ctx.emit('api-session/removed', sessionId);
+        return {
+          kind: 'success',
+          text: result.removed
+            ? `Deleted session ${sessionId}.`
+            : `Session ${sessionId} had no stored log.`,
+        };
+      } catch (error) {
+        // 扫描 project 层等 IO 意外不应以裸异常结算（那是无友好文案的
+        // command/done 错误），在这里转成可读的命令结果。
+        return { kind: 'error', text: `Delete failed: ${error instanceof Error ? error.message : String(error)}` };
+      }
     },
   }), 'delete-session: command');
 }

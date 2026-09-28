@@ -1,0 +1,37 @@
+{
+  "name": "dsh-plugin-delete-session",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "在侧边栏永久删除一个会话：行悬浮按钮、下拉菜单项与二次确认弹窗，执行 /delete-session 命令清除存储记录。",
+  "meta": {
+    "title": "删除会话",
+    "description": "侧边栏一键永久删除会话及其存储记录。"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locales/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "atomic-write.js",
+    "cordis.patch.yml",
+    "locales/*.json"
+  ],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  }
+}

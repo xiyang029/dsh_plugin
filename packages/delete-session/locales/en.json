@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Delete Session",
+    "description": "Permanently delete a session and its stored log from the sidebar."
+  }
+}

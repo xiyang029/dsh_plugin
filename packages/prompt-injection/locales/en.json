@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Prompt Injection",
+    "description": "Edit and persist a custom instruction injected into every system prompt."
+  }
+}

@@ -1,29 +1,15 @@
 /**
- * 聚合 bundle `dsh-plugin-pack` 中「删除会话」功能的包内 Client chunk。
+ * `dsh-plugin-delete-session` 的 Client 根模块。
  *
- * 为什么用 chunk：模块加载器按 boot row id 校验 bundle 的根注册，而 row id
- * 就是包名，所以根 `client.js` 只能注册 `id: 'dsh-plugin-pack'`。同一个包内
- * 的额外模块因此必须声明为 chunk：id 相同（加载器以 `<id>/<chunk>` 作为
- * 内部键），用 `chunk` 字段区分。`client-modules` 用
- * `/^client\.[A-Za-z0-9][A-Za-z0-9._-]*\.js$/` 校验 chunk 文件名。
+ * 本包只有一个组件行（见 cordis.patch.yml），Host 与 Client 由同一根行承载：
+ * 在插件页停用本插件时，收录扫描跳过该行，这里的 UI 与 Host 命令一起下线。
  *
- * 如何被加载：宿主从不主动加载。根 `client.js` 的工厂用
- * `require.async('./client.delete-session.js')` 拉取本文件；这是进入
- * `importChunk` 的唯一入口。根模块不来取，这里什么都不会执行。
- *
- * 暴露什么：这是一个被根工厂消费的普通模块，不是自己的插件行。
- * `materialize`（client-modules/lib/client.js:683）把工厂的返回值作为模块
- * exports，所以下面 return 的对象就是 `require.async` 解析到的值。根模块
- * 随后用自己的 ctx 调用 `apply(ctx)`，因此 locale 与 slot 注册都落在根
- * 上下文上，并使用本功能的命名空间。
- *
- * locale 命名空间保持 `edit-message`（合并前的既有值，为保持连续性而
- * 保留）。它与相邻 chunk 的 `prompt-injection` 命名空间互不相同，两者在
- * 同一页面不会冲突。
+ * Client 模块系统按 boot row id 校验根注册：row id 就是包名（bundle URL 形如
+ * `<row.id>/client.js`），所以这里的注册 id 必须等于包名，否则加载器报
+ * "loaded without registering" 并抛错，UI 挂不上。
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-plugin-pack',
-  chunk: 'client.delete-session.js',
+  id: 'dsh-plugin-delete-session',
   factory(require) {
     const React = require('react');
     const { createElement: h, useState, useLayoutEffect, useRef } = React;
@@ -40,7 +26,7 @@ window.__ModuleLoader__.load({
       IconTrashOutlineRegular,
     } = UI;
 
-    const NS = 'edit-message';
+    const NS = 'delete-session';
 
     const DICT = {
       en: {
@@ -109,13 +95,11 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      /**
-       * 在调用方的上下文（根 client.js 的 ctx）上注册本功能。这里故意不声明
-       * `inject`：本 chunk 是普通模块而非插件行，Service 注入由根模块持有，
-       * 本函数只使用被交到手里的服务。
-       */
+      /** 本模块需要的宿主 Client Service。 */
+      inject: ['slots', 'sessions', 'locale'],
+
       apply(ctx) {
-        ctx.effect(() => ctx.locale.register(NS, DICT), 'edit-message: dictionary');
+        ctx.effect(() => ctx.locale.register(NS, DICT), 'delete-session: dictionary');
 
         /**
          * 永久删除一个会话：执行 Host 命令，然后反复把列表行移除直到真的
@@ -123,7 +107,7 @@ window.__ModuleLoader__.load({
          */
         const deleteSession = async (sessionId) => {
           if (sessionId === undefined) throw new Error('no session');
-          await ctx.sessions.using(sessionId, { source: 'edit-message' }, async (reference) => {
+          await ctx.sessions.using(sessionId, { source: 'delete-session' }, async (reference) => {
             const result = await reference.binding.session.command(`/delete-session ${sessionId}`);
             if (!result.ok) {
               throw new Error(result.error ? `${result.error.code}: ${result.error.message}` : 'command failed');
@@ -288,7 +272,7 @@ window.__ModuleLoader__.load({
 
         ctx.slots.inject('sidebar.workspaces.session.row.action', () => ctx.slots.register({
           name: 'sidebar.workspaces.session.row.action',
-          id: 'edit-message-delete-session',
+          id: 'delete-session',
           order: 500,
           locale: NS,
         }, DeleteSessionRowAction));
@@ -296,7 +280,7 @@ window.__ModuleLoader__.load({
         // 同一个动作，作为会话「...」下拉菜单的一行。
         ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
           name: 'sidebar.workspaces.session.menu.item',
-          id: 'edit-message-delete-session',
+          id: 'delete-session',
           order: 500,
           locale: NS,
         }, DeleteSessionMenuItem));
@@ -304,7 +288,7 @@ window.__ModuleLoader__.load({
         // 确认对话框挂在这里，这样菜单关闭后它仍存活。
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay',
-          id: 'edit-message-delete-dialog',
+          id: 'delete-session-dialog',
           order: 900,
           locale: NS,
         }, DeleteConfirmHost));

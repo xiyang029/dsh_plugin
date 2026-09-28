@@ -1,33 +1,22 @@
 /**
- * 聚合 bundle `dsh-plugin-pack` 中「提示词注入」功能的包内 Client chunk。
+ * `dsh-plugin-prompt-injection` 的 Client 根模块。
  *
- * 为什么用 chunk：模块加载器按 boot row id 校验 bundle 的根注册，而 row id
- * 就是包名，所以根 `client.js` 只能注册 `id: 'dsh-plugin-pack'`。同一个包内
- * 的额外模块因此必须声明为 chunk：id 相同（加载器以 `<id>/<chunk>` 作为
- * 内部键），用 `chunk` 字段区分。`client-modules` 用
- * `/^client\.[A-Za-z0-9][A-Za-z0-9._-]*\.js$/` 校验 chunk 文件名。
+ * 本包只有一个组件行（见 cordis.patch.yml），Host 与 Client 由同一根行承载：
+ * 在插件页停用本插件时，收录扫描跳过该行，这里的 UI 与 Host 的
+ * systemPrompt section、web API 一起下线。
  *
- * 如何被加载：宿主从不主动加载。根 `client.js` 的工厂用
- * `require.async('./client.prompt-injection.js')` 拉取本文件；这是进入
- * `importChunk` 的唯一入口。根模块不来取，这里什么都不会执行。
+ * Client 模块系统按 boot row id 校验根注册：row id 就是包名（bundle URL 形如
+ * `<row.id>/client.js`），所以这里的注册 id 必须等于包名，否则加载器报
+ * "loaded without registering" 并抛错，UI 挂不上。
  *
- * 暴露什么：这是一个被根工厂消费的普通模块，不是自己的插件行。
- * `materialize`（client-modules/lib/client.js:683）把工厂的返回值作为模块
- * exports，所以下面 return 的对象就是 `require.async` 解析到的值。根模块
- * 随后用自己的 ctx 调用 `apply(ctx)`，因此 locale 与 slot 注册都落在根
- * 上下文上，并使用本功能的命名空间。
- *
- * locale 命名空间为 `prompt-injection`，与相邻 chunk 的 `edit-message`
- * 命名空间互不相同，两者在同一页面不会冲突。
+ * 模块系统把 primitives 包作为基线 external 解析，所以对话框、按钮和
+ * 图标都来自宿主自己的控件，而不是手工复刻标记加私有样式表。
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-plugin-pack',
-  chunk: 'client.prompt-injection.js',
+  id: 'dsh-plugin-prompt-injection',
   factory(require) {
     const React = require('react');
     const { createElement: h, useState, useEffect } = React;
-    // 模块系统把 primitives 包作为基线 external 解析，所以对话框、按钮和
-    // 图标都来自宿主自己的控件，而不是手工复刻标记加私有样式表。
     const UI = require('@deepseek-ai/dsh-client-ui-primitives');
     const { Modal, Button, IconEditOutlineRegular } = UI;
 
@@ -107,11 +96,9 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      /**
-       * 在调用方的上下文（根 client.js 的 ctx）上注册本功能。这里故意不声明
-       * `inject`：本 chunk 是普通模块而非插件行，Service 注入由根模块持有，
-       * 本函数只使用被交到手里的服务。
-       */
+      /** 本模块需要的宿主 Client Service。 */
+      inject: ['slots', 'locale'],
+
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, DICT), 'prompt-injection: dictionary');
 

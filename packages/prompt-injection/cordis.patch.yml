@@ -1,0 +1,4 @@
+- insert:
+    # 唯一根行：Host 功能与 Client bundle 都由它承载，停用即前后端一起下线。
+    - id: dsh-plugin-prompt-injection
+      name: dsh-plugin-prompt-injection

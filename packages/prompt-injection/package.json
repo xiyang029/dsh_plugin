@@ -1,26 +1,22 @@
 {
-  "name": "dsh-plugin-pack",
+  "name": "dsh-plugin-prompt-injection",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
-  "description": "聚合插件包：一次安装即可获得删除会话与提示词注入两项功能",
+  "description": "在侧边栏编辑一段自定义指令，持久化后注入到每一轮请求的系统提示词中。",
   "meta": {
-    "title": "聚合插件包",
-    "description": "聚合多个功能的单包插件：删除会话、提示词注入。"
+    "title": "提示词注入",
+    "description": "编辑并持久化一段注入到每轮系统提示词的自定义指令。"
   },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
-    "./delete-session": "./features/delete-session/host.js",
-    "./prompt-injection": "./features/prompt-injection/host.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locales/*.json"
   },
   "files": [
     "index.js",
     "client.js",
-    "client.*.js",
-    "features/*/host.js",
+    "atomic-write.js",
     "cordis.patch.yml",
     "locales/*.json"
   ],

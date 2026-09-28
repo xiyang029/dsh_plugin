@@ -1,262 +1,119 @@
-# dsh-plugin-pack — DSH 聚合插件包
+# dsh_plugin — DSH 插件合集（monorepo）
 
-## 1. 项目简介
+本仓库包含两个**相互独立**的 dsh 插件包，放在同一个 git 仓库里维护，但各自
+拥有独立的包名、版本号、组件行与生命周期——在 dsh 插件页里是两个独立插件，
+**可以分别停用/启用，且停用即前后端（Host 命令/服务 + Client UI）一起下线**。
 
-`dsh-plugin-pack` 是一个**单包聚合插件**（方案 A）：把原本各自独立的两个插件仓库
-`dsh-plugin-delete-message`（删除会话）与 `dsh-plugin-prompt-injection`（提示词注入）
-合并进同一个仓库、同一个包中。
+| 包 | 目录 | 功能 | 插件页显示 |
+| --- | --- | --- | --- |
+| `dsh-plugin-delete-session` | [`packages/delete-session`](packages/delete-session) | 侧边栏一键永久删除会话（行悬浮按钮、下拉菜单项、二次确认弹窗） | 删除会话 |
+| `dsh-plugin-prompt-injection` | [`packages/prompt-injection`](packages/prompt-injection) | 编辑一段自定义指令，持久化后注入到每一轮请求的系统提示词 | 提示词注入 |
 
-它只暴露**一个** bundle 行，安装一次即可获得全部功能：
+## 1. 为什么是"两个包"而不是"一个聚合包"
 
-- 只安装一个包，不再需要分别为两个插件执行安装命令；
-- 只注册一个 Host 插件与**一个** Client 根模块（UI 按需从包内 chunk 加载），生命周期统一；
-- 升级、卸载、开关都只需操作这一行。
+dsh 的 Client 收录机制有一条硬约束：**只有根包名行会进 Client boot graph**，
+且一个包只允许一个 Client bundle 源（`dsh-client-modules` 对"同一包被多个
+活动 Loader 行引用"直接抛错）。聚合包结构（一根行 + N 个功能子路径行）里，
+插件页停用某个功能行只会摘除 Host 半边，Client UI 由根行统一加载、无法跟随
+下线。
 
-| 项目 | 值 |
+要"每个功能的前后端独立开关"，每个功能必须拥有自己的根行 = 自己的包。
+本仓库因此采用 monorepo：一次 `git clone` / 一条安装命令获得两个插件，
+但每个插件都是标准的"一根行一包"结构。
+
+## 2. 安装（一条命令，两个插件）
+
+从 GitHub 安装（`#path:` 指向仓库内的包目录，pnpm 原生支持）：
+
+```powershell
+dsh plugin --profile desktop add `
+  github:xiyang029/dsh_plugin#path:packages/delete-session `
+  github:xiyang029/dsh_plugin#path:packages/prompt-injection
+```
+
+从本地目录安装（开发调试，同样一条命令）：
+
+```powershell
+dsh plugin --profile desktop add `
+  E:\python\dsh_plugin\packages\delete-session `
+  E:\python\dsh_plugin\packages\prompt-injection
+```
+
+安装后重启（或让 profile 热加载）即可生效。每个包的 `package.json` 都声明了
+`dsh.bundle.patch` 指向自带的 `cordis.patch.yml`，不需要手动编辑 profile 的
+patch 文件。
+
+安装、升级、停用、卸载都按**单个包**进行：
+
+```powershell
+dsh plugin --profile desktop remove dsh-plugin-delete-session     # 只卸载删除会话
+dsh plugin --profile desktop remove dsh-plugin-prompt-injection   # 只卸载提示词注入
+```
+
+> 从旧版聚合包（`dsh-plugin-pack`）升级：先卸载旧包再安装两个新包。
+> 两个新包的数据与旧包完全兼容——提示词注入沿用同一个存储文件，
+> 删除会话不产生数据。
+
+## 3. 每个包的内部结构
+
+两个包结构完全一致（以 `delete-session` 为例）：
+
+```
+packages/delete-session/
+├── package.json         # dsh.bundle.patch（Host 接线）+ dsh.client（Client 接线）
+├── cordis.patch.yml     # 一行 insert：id = 包名的根行
+├── index.js             # Host：apply/inject，注册命令或服务
+├── client.js            # Client 根模块：注册 id = 包名，挂载 UI
+├── atomic-write.js      # 包私有的零依赖原子文件替换
+└── locales/{en,zh}.json # 插件页元数据文案
+```
+
+- **Host 侧**（`index.js`）导出 `name`（cordis 插件名）、`inject`（所需
+  Service）与 `apply(ctx, config)`，注册随 `ctx.effect` 的生命周期销毁。
+- **Client 侧**（`client.js`）按 boot row id（= 包名）注册根模块，声明
+  `inject`（所需 Client Service）并在 `apply(ctx)` 里注册 locale 与 slots。
+- 插件页停用该包 → 收录扫描跳过这一行 → Host 不加载、Client bundle 不进
+  boot graph，**前后端一起下线**。
+
+## 4. 功能细节
+
+### 删除会话（dsh-plugin-delete-session）
+
+- Host：注册 `/delete-session <sessionId>` 命令——删除会话工件目录、从
+  工作区注册表注销、清扫投影缓存行（原子写保护 `workspace.json`），并广播
+  `api-session/removed` 让侧边栏同步移除该行。
+- Client：会话行悬浮垃圾桶按钮 + 「...」菜单项，点击弹出确认弹窗，确认后
+  执行命令并反复刷新列表直到该行真正消失。
+
+### 提示词注入（dsh-plugin-prompt-injection）
+
+- Host：把保存的文本注册为 `systemPrompt` section（`order: -90`，排在部署
+  人格之前），并提供 `GET/POST /api/prompt-injection` 读写接口。接口带完整
+  防护：`connection` 服务的信任围栏（Host/Origin + 浏览器认证）、content-type
+  校验、64KB 请求体上限、原子写持久化。
+- Client：侧边栏面板列表新增"提示词注入"入口，编辑弹窗支持保存、取消、
+  恢复默认。该功能的界面文案在所有语言下均为中文——它本身的作用就是把
+  助手引导到中文。
+
+## 5. 数据位置
+
+| 数据 | 位置 |
 | --- | --- |
-| 包名 | `dsh-plugin-pack` |
-| 版本 | `1.0.0` |
-| 可见性 | `private` |
-| 模块类型 | `type: "module"`（ESM） |
-| 仓库 | <https://github.com/xiyang029/dsh_plugin> |
-| 许可证 | MIT |
+| 提示词注入的文本 | `$DSH_HOME/prompt-injection/prompt-injection.json`（删除该文件即恢复默认指令） |
+| 删除会话 | 不产生自己的数据；它删除的是 `$DSH_HOME/sessions/` 下的会话工件 |
 
-## 2. 功能列表
+## 6. 开发说明
 
-### ① 删除会话（delete-session）
+- 两个包均为纯 ESM JavaScript，**无构建步骤**：仓库内源码即运行代码。
+- 修改某个包后重启对应运行时（或触发热加载）即可看到效果；本地调试用
+  `dsh plugin --profile desktop add <包目录>` 指向仓库内的包目录即可。
+- 修改 Client UI 只改对应包的 `client.js`（唯一实现）。
+- 新增第三个插件：在 `packages/` 下新建同构目录（package.json /
+  cordis.patch.yml / index.js / client.js / locales），并在本 README 的
+  包表格中登记。
 
-- 侧边栏会话行**悬浮按钮**：鼠标移入会话行时出现垃圾桶图标，位置与样式对齐宿主
-  自带的归档／置顶按钮（16×16、无内边距、同样的 tooltip 位置与 500ms 延迟）。
-- 会话行 **"..." 下拉菜单**中同样提供"删除会话"一项。
-- 点击后弹出**确认弹窗**，需二次确认才执行。
-- 确认后执行 Host 命令 `/delete-session <sessionId>`，**永久删除该会话及其存储记录**，
-  不可撤销。
+## 7. 许可证
 
-### ② 提示词注入（prompt-injection）
-
-- 在**侧边栏面板列表**中新增一个入口（图标 + 中文标签"提示词注入"）。
-- 打开后是一个编辑面板／弹窗，可编辑一段**自定义指令**。
-- 保存后该文本被**持久化**，并注入到每一轮请求的系统提示词中。
-- 提供"恢复默认"按钮，可一键还原为默认文本（默认指令的中文语义为"始终使用中文…"）。
-- 该功能的界面文案在**所有语言环境下均为中文**：它本身的作用就是把助手引导到中文，
-  因此 UI 不允许泄漏英文。
-
-## 3. 安装
-
-```powershell
-dsh plugin --profile desktop add github:xiyang029/dsh_plugin
-```
-
-安装后重启（或让 profile 热加载）即可生效。包内已声明 `dsh.bundle.patch` 指向自带的
-`cordis.patch.yml`，因此**不需要**手动编辑 profile 的 patch 文件。
-
-## 4. 目录结构
-
-```
-dsh_plugin/
-├── package.json
-├── cordis.patch.yml
-├── index.js                     # Host 聚合入口
-├── client.js                    # Client 根模块（注册 id = 包名）
-├── client.delete-session.js     # 包内 chunk：删除会话 UI
-├── client.prompt-injection.js   # 包内 chunk：提示词注入 UI
-├── locales/{en,zh}.json
-├── features/
-│   ├── delete-session/host.js
-│   └── prompt-injection/host.js
-└── README.md
-```
-
-各文件职责：
-
-| 路径 | 职责 |
-| --- | --- |
-| `index.js` | Host 聚合入口：`FEATURES` 数组 + `apply`，把各 feature 的 Host 半边挂到同一个 ctx |
-| `client.js` | Client **根模块**：注册 `id: 'dsh-plugin-pack'`，并在 `apply` 里按需拉取两个 chunk |
-| `client.<name>.js` | 包内 **chunk**：该 feature 的 Client UI（唯一实现，运行时真正加载的就是它） |
-| `features/<name>/host.js` | 单个功能的 Host 实现（自带 `apply` 与 `inject`，被 `index.js` import） |
-| `locales/{en,zh}.json` | 包级元数据文案（标题／描述），与 feature 的 locale 命名空间相互独立 |
-| `cordis.patch.yml` | bundle patch，只向 profile 插入一行 `dsh-plugin-pack` |
-
-## 5. 工作原理
-
-### Host 侧
-
-`index.js` 是唯一的 Host 入口，它导出：
-
-- `inject`：两个 feature 所需 Host Service 的**并集**（`commands`、`systemPrompt`、`webServer`）。
-  因为 Cordis 插件用 `inject` 声明依赖，一个 bundle 挂多个 feature 时必须声明并集；
-  被禁用的 feature 对应的 Service 只是永远不会被解析，不会成为任何东西的硬依赖。
-- `FEATURES`：本 bundle 提供的 feature 列表，按挂载顺序排列。
-- `apply(ctx, config)`：遍历 `FEATURES`，逐个调用该 feature 的 `apply`，
-  并把 `config[feature.name]` 作为该 feature 的配置传下去。
-
-每个 feature 的注册都由它自己 `apply` 内部的 `ctx.effect` 持有，因此直接调用 `apply`
-即可让它的注册随 bundle 一起被正确销毁。`apply` **故意不捕获异常**：
-某个 feature 抛错时会作为 Loader 中一行失败的 bundle 记录暴露出来，而不是被静默吞掉。
-
-### Client 侧：根模块 + 两个 chunk
-
-这里有一个**硬约束**：DSH 的 Client 模块加载器按 boot row id 校验注册结果，
-而一行的 row id **就是包名**（该行的 bundle URL 形如 `<row.id>/client.js`）。
-因此根模块**只能**注册 `id: 'dsh-plugin-pack'`；若注册 `dsh-plugin-pack#xxx` 之类的
-id，`arrive()` 会判定"脚本加载了却没有注册该 id"并抛错，两个 UI 全部挂不上。
-
-同一个包内的额外模块必须走 **chunk 机制**：注册时 `id` 仍等于包名，
-用 `chunk` 字段区分，加载器内部以 `<包名>/<chunk文件名>` 作为键。
-
-| 文件 | 注册的 id | 注册的 chunk |
-| --- | --- | --- |
-| `client.js` | `dsh-plugin-pack` | ——（根模块） |
-| `client.delete-session.js` | `dsh-plugin-pack` | `client.delete-session.js` |
-| `client.prompt-injection.js` | `dsh-plugin-pack` | `client.prompt-injection.js` |
-
-chunk 文件名必须匹配 `/^client\.[A-Za-z0-9][A-Za-z0-9._-]*\.js$/`。
-
-**chunk 由谁加载？** 宿主**不会**自动加载 chunk。根模块的工厂函数拿到的 `require`
-带有一个 `require.async` 方法，相对路径分支会切掉 `"./"`、校验文件名，再去拉取并注册
-该 chunk。所以 `client.js` 的 `apply` 里显式拉取两个 chunk：
-
-```js
-async apply(ctx) {
-  if (ENABLED['delete-session'] === true) {
-    const deleteSession = await require.async('./client.delete-session.js');
-    deleteSession.apply(ctx);
-  }
-  if (ENABLED['prompt-injection'] === true) {
-    const promptInjection = await require.async('./client.prompt-injection.js');
-    promptInjection.apply(ctx);
-  }
-}
-```
-
-chunk 是**被根模块消费的普通模块，不是独立的插件行**，因此它以**返回值**暴露导出
-（加载器把工厂函数的返回值当作该模块的 exports）。本项目让每个 chunk 返回
-`{ apply(ctx) }`，由上方的根模块把**根 ctx** 传进去。
-
-于是 locale 注册与 slot 注册都发生在根 ctx 上，但各自使用**自己的命名空间**
-（`edit-message` 与 `prompt-injection`）与各自不重叠的 slot 名，因此两个功能在
-同一个页面里并存而不会冲突：
-
-| chunk | locale 命名空间 | 注册的 slot |
-| --- | --- | --- |
-| `client.delete-session.js` | `edit-message` | `sidebar.workspaces.session.row.action`、`sidebar.workspaces.session.menu.item`、`shell.overlay` |
-| `client.prompt-injection.js` | `prompt-injection` | `sidebar.panellist`、`main` |
-
-> 维护约定：每个 feature 的 Client UI 只有一份实现，就是根目录的 `client.<name>.js`
-> chunk。改 UI 只改这一处，不存在需要同步的镜像文件。
-
-### bundle 接线
-
-`cordis.patch.yml` 向 profile 的插件列表**插入三行**：一行根行
-`dsh-plugin-pack`（Client bundle 的唯一载体 —— 收录机制只认根包名行，
-子路径行不进 Client boot graph），加两行功能子路径行
-`dsh-plugin-pack/delete-session` 与 `dsh-plugin-pack/prompt-injection`
-（各自的 Host 功能）。官方插件页里本包显示为**三个组件**：根行
-（Host 侧为空操作，仅承载 UI）+ 两个功能组件，功能组件可独立停用/启用。
-新增 feature 时需要：在 `index.js` 的 `FEATURES` 里加一项、在 `client.js` 的
-`ENABLED` 里加一个键、在 `package.json` 的 `exports` 里加一个子路径导出、
-并新增一个 `client.<name>.js` chunk 和一行 patch insert。
-
-## 6. 开关与"不能单独卸载"的取舍
-
-### 整包开关
-
-本包仍是一个 bundle（一次安装、一条卸载命令），但包含**两个可独立开关的组件**：
-
-```powershell
-dsh plugin --profile desktop remove dsh-plugin-pack   # 整包卸载
-```
-
-无法只卸载其中一个功能，也无法让两个功能各自拥有独立的版本号与升级节奏；
-换来的是"一次安装 = 全部功能"。单个功能的启停在插件页的两个组件行上完成，
-或在源码里按下节的开关改。
-
-### 只启用其中一个功能
-
-包内部提供了按 feature 的细粒度开关，**两个入口各管一半**：
-
-**(a) Host 侧 —— `index.js` 的 `FEATURES` 数组（源码实际字段）**
-
-```js
-export const FEATURES = [
-  { name: 'delete-session',   title: '删除会话',   enabled: true, apply: applyDeleteSession },
-  { name: 'prompt-injection', title: '提示词注入', enabled: true, apply: applyPromptInjection },
-];
-```
-
-数组每项的字段为 `name` / `title` / `enabled` / `apply`：
-
-- `enabled`：布尔字段。`apply` 中的判断为 `if (feature.enabled === false) continue;`，
-  即只有**显式** `false` 才会跳过该 feature，`true` 或省略都会挂载。
-- `name`：同时是 `config` 的取键名（`config?.[feature.name] ?? {}`），
-  也是 `features/<name>/` 的目录名。
-- `title`：人类可读名称，仅用于识别。
-- `apply`：该 feature 的 Host 挂载函数。
-
-因此"只想启用提示词注入"，把 `delete-session` 那项的 `enabled` 改为 `false` 即可。
-
-**(b) Client 侧 —— `client.js` 工厂函数内的 `ENABLED` 映射**
-
-注意：Client 侧的开关**不是** `FEATURES` 数组，而是一张按 feature 名索引的映射，
-位于**根工厂函数内部**（不是文件顶层常量）：
-
-```js
-factory(require) {
-  const ENABLED = { 'delete-session': true, 'prompt-injection': true };
-  // ...
-}
-```
-
-它在 `apply` 中决定是否拉取对应的 chunk：**跳过 `require.async` 即等于不加载该功能**，
-其 locale 命名空间与 slot 都不会被注册。
-
-同样地，只有**显式 `true`** 才会去拉取 chunk，另一个 feature 不受影响。
-
-> **必须两侧同时改。** Host 与 Client 的开关是两份彼此独立的配置：只改一边会出现
-> "Host 已挂载但 UI 不出现"（或反之）的半残状态。禁用某个功能时，
-> 请同时修改 `index.js` 的 `FEATURES[i].enabled` 与 `client.js` 内的 `ENABLED[name]`。
-
-### 与 feature 源码的关系
-
-`features/<name>/host.js` 是 Host 侧真正被 `index.js` import 的实现，改它有效；
-Client UI 则直接改根目录的 `client.<name>.js` chunk（唯一实现）。
-`features/` 下只有 Host 代码，没有 Client 代码。
-
-## 7. 数据位置
-
-提示词注入的文本持久化在 DSH 用户目录下：
-
-```
-$DSH_HOME/prompt-injection/prompt-injection.json
-```
-
-- 该文件由 prompt-injection feature 的 Host 半边通过 HTTP 接口 `api/prompt-injection`
-  读写（Client 侧用 `fetch(API, { method: 'GET' | 'POST' })`）。
-- 文件不存在时接口返回默认文本；"恢复默认"按钮会把编辑器内容重置为该默认值。
-- 删除该文件即可恢复到初始状态（不会影响会话数据）。
-
-## 8. 开发与本地安装
-
-仓库根目录即包根目录，无需构建步骤（源码直接作为 ESM 加载）。
-
-方式一：从本地绝对路径安装 bundle
-
-```
-install_bundle F:\dsh_plugin
-```
-
-方式二：把本地目录加入某个 profile
-
-```powershell
-dsh plugin --profile desktop add F:\dsh_plugin
-```
-
-修改 `index.js` / `client.js` 后，重启对应运行时（或触发热加载）即可看到效果；
-修改 Client UI 时直接编辑对应的 `client.<name>.js` chunk 即可。
-
-## 9. 许可证
-
-本项目基于 [MIT License](./LICENSE) 发布。
+本仓库基于 [MIT License](./LICENSE) 发布。
 
 Copyright (c) 2026 xiyang029
